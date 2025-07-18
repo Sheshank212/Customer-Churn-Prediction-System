@@ -1,0 +1,118 @@
+# Prometheus Alert Rules for Customer Churn Prediction System
+# Defines alerts for system health, performance, and model quality
+
+groups:
+- name: churn_prediction_alerts
+  rules:
+  
+  # API Health Alerts
+  - alert: APIDown
+    expr: up{job="churn-prediction-api"} == 0
+    for: 30s
+    labels:
+      severity: critical
+    annotations:
+      summary: "Churn Prediction API is down"
+      description: "The Churn Prediction API has been down for more than 30 seconds."
+      
+  - alert: HighResponseTime
+    expr: prediction_duration_seconds{quantile="0.95"} > 2
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High API response time"
+      description: "95th percentile response time is above 2 seconds for 2 minutes."
+      
+  - alert: HighErrorRate
+    expr: rate(api_requests_total{status_code!~"2.."}[5m]) > 0.1
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High API error rate"
+      description: "API error rate is above 10% for the last minute."
+
+  # Model Performance Alerts
+  - alert: UnbalancedPredictions
+    expr: |
+      (
+        sum(rate(predictions_total{prediction="True"}[1h])) / 
+        sum(rate(predictions_total[1h]))
+      ) > 0.8 or
+      (
+        sum(rate(predictions_total{prediction="True"}[1h])) / 
+        sum(rate(predictions_total[1h]))
+      ) < 0.1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Unbalanced model predictions"
+      description: "Model predictions are heavily skewed (>80% or <10% churn predictions)."
+      
+  - alert: LowPredictionVolume
+    expr: rate(predictions_total[5m]) < 0.1
+    for: 5m
+    labels:
+      severity: info
+    annotations:
+      summary: "Low prediction volume"
+      description: "Prediction volume is below expected threshold."
+
+  # System Resource Alerts
+  - alert: HighMemoryUsage
+    expr: (container_memory_usage_bytes{name="churn-prediction-api"} / container_spec_memory_limit_bytes{name="churn-prediction-api"}) > 0.8
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High memory usage"
+      description: "Container memory usage is above 80% for 2 minutes."
+      
+  - alert: HighCPUUsage
+    expr: rate(container_cpu_usage_seconds_total{name="churn-prediction-api"}[5m]) > 0.8
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High CPU usage"
+      description: "Container CPU usage is above 80% for 2 minutes."
+
+  # Database Alerts
+  - alert: DatabaseDown
+    expr: up{job="postgres-exporter"} == 0
+    for: 30s
+    labels:
+      severity: critical
+    annotations:
+      summary: "PostgreSQL database is down"
+      description: "PostgreSQL database has been down for more than 30 seconds."
+      
+  - alert: HighDatabaseConnections
+    expr: pg_stat_database_numbackends > 50
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High database connections"
+      description: "Number of database connections is above 50."
+
+  # Model Quality Alerts
+  - alert: ModelDriftDetected
+    expr: increase(feedback_total{feedback_type="incorrect_prediction"}[1h]) > 10
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Potential model drift detected"
+      description: "High number of incorrect predictions reported in the last hour."
+      
+  - alert: NoFeedbackReceived
+    expr: increase(feedback_total[24h]) == 0
+    for: 1h
+    labels:
+      severity: info
+    annotations:
+      summary: "No feedback received"
+      description: "No feedback has been received in the last 24 hours."
