@@ -1,0 +1,49 @@
+# Core ML and Data Science Libraries
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.5.1
+xgboost==3.0.2
+lightgbm==4.6.0
+joblib==1.4.2
+
+# FastAPI and Web Framework
+fastapi==0.115.5
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+python-multipart==0.0.12
+
+# Model Explainability
+shap==0.47.0
+
+# Visualization
+matplotlib==3.9.2
+seaborn==0.13.2
+
+# Database (PostgreSQL)
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.35
+
+# Monitoring and Logging
+prometheus-client==0.21.0
+
+# Data Generation and Testing
+faker==37.0.0
+
+# Utilities
+python-dateutil==2.9.0
+tqdm==4.66.5
+requests==2.32.3
+
+# Development and Testing
+pytest==8.3.3
+pytest-asyncio==0.24.0
+httpx==0.28.0
+
+# Container and Deployment
+gunicorn==23.0.0
+
+# Optional: MLflow for experiment tracking
+mlflow==2.18.0
+
+# Optional: Airflow for orchestration
+# apache-airflow==2.8.1

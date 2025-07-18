@@ -1,0 +1,90 @@
+# Development and Testing Dependencies for Customer Churn Prediction System
+
+# Core requirements (from requirements.txt)
+-r requirements.txt
+
+# Development Tools
+black==24.3.0                    # Code formatter
+flake8==7.0.0                    # Code linter
+mypy==1.8.0                      # Static type checker
+pre-commit==3.6.2                # Git hooks for code quality
+isort==5.13.2                    # Import sorting
+
+# Testing
+pytest==8.3.3                    # Testing framework
+pytest-cov==4.0.0                # Coverage plugin for pytest
+pytest-xdist==3.5.0              # Parallel test execution
+pytest-mock==3.12.0              # Mock objects for testing
+pytest-asyncio==0.24.0           # Async testing support
+httpx==0.28.0                     # HTTP client for testing APIs
+factory-boy==3.3.0               # Test data generation
+freezegun==1.4.0                 # Time mocking for tests
+
+# Documentation
+sphinx==7.2.6                    # Documentation generator
+sphinx-rtd-theme==2.0.0          # Read the Docs theme
+myst-parser==2.0.0               # Markdown parser for Sphinx
+sphinx-autodoc-typehints==1.25.3 # Type hints in documentation
+
+# Database Development
+pgcli==4.0.1                     # PostgreSQL command line client
+psycopg2-binary==2.9.9          # PostgreSQL adapter (already in main requirements)
+alembic==1.13.1                  # Database migration tool
+
+# Jupyter Development
+jupyter==1.0.0                   # Jupyter notebook
+ipykernel==6.29.0                # IPython kernel for Jupyter
+nbconvert==7.16.1                # Notebook conversion
+jupyterlab==4.1.5                # JupyterLab interface
+
+# Performance and Profiling
+memory-profiler==0.61.0          # Memory usage profiler
+line-profiler==4.1.1             # Line-by-line profiler
+py-spy==0.3.14                   # Sampling profiler
+
+# Code Quality and Security
+bandit==1.7.7                    # Security linter
+safety==3.0.1                    # Check for security vulnerabilities
+semgrep==1.61.1                  # Static analysis tool
+
+# API Development
+fastapi-users==13.0.0            # User management for FastAPI
+python-jose[cryptography]==3.3.0 # JWT token handling
+passlib[bcrypt]==1.7.4           # Password hashing
+python-multipart==0.0.12         # Form data parsing (already in main requirements)
+
+# Monitoring and Debugging
+sentry-sdk[fastapi]==1.40.6      # Error tracking
+structlog==24.1.0                # Structured logging
+rich==13.7.1                     # Rich text and beautiful formatting
+
+# Data Analysis and Visualization
+plotly==5.19.0                   # Interactive visualizations
+dash==2.16.1                     # Web applications for Python
+streamlit==1.31.1                # Data app framework
+
+# Development Utilities
+python-dotenv==1.0.1             # Environment variable loading
+click==8.1.7                     # Command line interface creation
+tqdm==4.66.5                     # Progress bars (already in main requirements)
+colorama==0.4.6                  # Colored terminal output
+
+# ML Development
+optuna==3.5.0                    # Hyperparameter optimization
+wandb==0.16.3                    # Experiment tracking
+evidently==0.4.18                # ML model monitoring
+great-expectations==0.18.12      # Data validation
+
+# Container Development
+docker==7.0.0                    # Docker Python API
+docker-compose==1.29.2           # Docker Compose Python API
+
+# Development Server
+watchdog==4.0.0                  # File system monitoring
+uvicorn[standard]==0.30.6        # ASGI server with extras (already in main requirements)
+
+# Optional: Development database
+sqlite3                          # SQLite for local development (built-in)
+
+# Version Control
+gitpython==3.1.42               # Git Python API

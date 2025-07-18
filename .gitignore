@@ -1,0 +1,52 @@
+# Python cache files
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.pytest_cache/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite3
+
+# Process documentation files (not part of the project)
+*clean*.md
+*push*.sh
+*PUSH*.sh
+*EXECUTE*.sh
+api_pid.txt
+api_test.log
