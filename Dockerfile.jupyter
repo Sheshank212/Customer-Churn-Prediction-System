@@ -1,0 +1,76 @@
+# Dockerfile for Jupyter Notebook Environment
+# Customer Churn Prediction System - Data Science Environment
+
+FROM jupyter/scipy-notebook:latest
+
+# Maintainer information
+LABEL maintainer="Customer Churn Prediction System"
+LABEL description="Jupyter environment for ML analysis and experimentation"
+
+# Set working directory
+WORKDIR /home/jovyan/work
+
+# Switch to root for package installation
+USER root
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Switch back to jovyan user
+USER jovyan
+
+# Copy requirements
+COPY requirements.txt /tmp/requirements.txt
+
+# Install Python packages
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Install additional Jupyter extensions
+RUN pip install --no-cache-dir \
+    jupyterlab-git \
+    jupyterlab-lsp \
+    python-lsp-server[all] \
+    jupyter-resource-usage \
+    jupyterlab_execute_time \
+    plotly \
+    nbconvert
+
+# Enable Jupyter extensions
+RUN jupyter labextension install @jupyter-widgets/jupyterlab-manager --no-build && \
+    jupyter labextension install plotlywidget --no-build && \
+    jupyter lab build --dev-build=False --minimize=False
+
+# Copy project files
+COPY --chown=jovyan:users . /home/jovyan/work/
+
+# Create necessary directories
+RUN mkdir -p /home/jovyan/work/data/raw && \
+    mkdir -p /home/jovyan/work/models && \
+    mkdir -p /home/jovyan/work/figures && \
+    mkdir -p /home/jovyan/work/notebooks/experiments
+
+# Set environment variables
+ENV PYTHONPATH=/home/jovyan/work
+ENV JUPYTER_ENABLE_LAB=yes
+
+# Expose Jupyter port
+EXPOSE 8888
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8888/api || exit 1
+
+# Start Jupyter Lab
+CMD ["start-notebook.sh", \
+     "--NotebookApp.token=''", \
+     "--NotebookApp.password=''", \
+     "--NotebookApp.allow_root=True", \
+     "--NotebookApp.ip='0.0.0.0'", \
+     "--NotebookApp.port=8888", \
+     "--NotebookApp.allow_origin='*'", \
+     "--NotebookApp.base_url='/jupyter'"]
