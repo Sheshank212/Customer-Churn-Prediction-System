@@ -1,0 +1,460 @@
+-- Advanced SQL Preprocessing Queries for Customer Churn Prediction
+-- Author: Sheshank
+
+-- Query 1: Comprehensive Customer Feature Engineering
+-- Combines all tables with advanced window functions and aggregations
+CREATE OR REPLACE VIEW customer_features AS
+WITH 
+-- Transaction metrics with advanced window functions
+transaction_metrics AS (
+    SELECT 
+        t.customer_id,
+        COUNT(*) as total_transactions,
+        SUM(CASE WHEN t.transaction_type = 'Payment' AND t.status = 'Completed' THEN t.amount ELSE 0 END) as successful_payments,
+        SUM(CASE WHEN t.transaction_type = 'Refund' THEN ABS(t.amount) ELSE 0 END) as total_refunds,
+        COUNT(CASE WHEN t.status = 'Failed' THEN 1 END) as failed_transactions,
+        COUNT(CASE WHEN t.status = 'Failed' THEN 1 END)::FLOAT / COUNT(*) as failure_rate,
+        AVG(CASE WHEN t.transaction_type = 'Payment' THEN t.amount END) as avg_payment_amount,
+        STDDEV(CASE WHEN t.transaction_type = 'Payment' THEN t.amount END) as payment_amount_stddev,
+        MAX(t.transaction_date) as last_transaction_date,
+        MIN(t.transaction_date) as first_transaction_date,
+        -- Advanced: Payment consistency metrics
+        COUNT(DISTINCT DATE_TRUNC('month', t.transaction_date)) as active_months,
+        COUNT(CASE WHEN t.transaction_date >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as transactions_last_30_days,
+        COUNT(CASE WHEN t.transaction_date >= CURRENT_DATE - INTERVAL '60 days' THEN 1 END) as transactions_last_60_days,
+        COUNT(CASE WHEN t.transaction_date >= CURRENT_DATE - INTERVAL '90 days' THEN 1 END) as transactions_last_90_days,
+        -- Payment method consistency
+        COUNT(DISTINCT t.payment_method) as unique_payment_methods,
+        -- Recent transaction trend
+        AVG(CASE WHEN t.transaction_date >= CURRENT_DATE - INTERVAL '30 days' 
+                 AND t.transaction_type = 'Payment' THEN t.amount END) as avg_payment_last_30_days,
+        AVG(CASE WHEN t.transaction_date >= CURRENT_DATE - INTERVAL '60 days' 
+                 AND t.transaction_date < CURRENT_DATE - INTERVAL '30 days'
+                 AND t.transaction_type = 'Payment' THEN t.amount END) as avg_payment_30_60_days_ago
+    FROM transactions t
+    GROUP BY t.customer_id
+),
+
+-- Support ticket advanced analytics
+support_metrics AS (
+    SELECT 
+        s.customer_id,
+        COUNT(*) as total_support_tickets,
+        COUNT(CASE WHEN s.status = 'Open' THEN 1 END) as open_tickets,
+        COUNT(CASE WHEN s.status = 'Resolved' THEN 1 END) as resolved_tickets,
+        -- Issue category breakdown
+        COUNT(CASE WHEN s.issue_category = 'Billing' THEN 1 END) as billing_tickets,
+        COUNT(CASE WHEN s.issue_category = 'Technical' THEN 1 END) as technical_tickets,
+        COUNT(CASE WHEN s.issue_category = 'Cancellation' THEN 1 END) as cancellation_tickets,
+        COUNT(CASE WHEN s.issue_category = 'Account' THEN 1 END) as account_tickets,
+        -- Priority distribution
+        COUNT(CASE WHEN s.priority = 'High' THEN 1 END) as high_priority_tickets,
+        COUNT(CASE WHEN s.priority = 'Critical' THEN 1 END) as critical_priority_tickets,
+        -- Satisfaction metrics
+        AVG(s.satisfaction_score) as avg_satisfaction_score,
+        MIN(s.satisfaction_score) as min_satisfaction_score,
+        COUNT(CASE WHEN s.satisfaction_score <= 2 THEN 1 END) as low_satisfaction_tickets,
+        -- Resolution time metrics
+        AVG(s.resolution_time_hours) as avg_resolution_time_hours,
+        MAX(s.resolution_time_hours) as max_resolution_time_hours,
+        -- Escalation metrics
+        COUNT(CASE WHEN s.escalated = TRUE THEN 1 END) as escalated_tickets,
+        COUNT(CASE WHEN s.escalated = TRUE THEN 1 END)::FLOAT / COUNT(*) as escalation_rate,
+        -- Recent support activity
+        COUNT(CASE WHEN s.created_date >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as tickets_last_30_days,
+        COUNT(CASE WHEN s.created_date >= CURRENT_DATE - INTERVAL '60 days' THEN 1 END) as tickets_last_60_days,
+        COUNT(CASE WHEN s.created_date >= CURRENT_DATE - INTERVAL '90 days' THEN 1 END) as tickets_last_90_days,
+        -- Communication channel preferences
+        COUNT(DISTINCT s.channel) as unique_channels_used,
+        -- First and last ticket dates
+        MIN(s.created_date) as first_ticket_date,
+        MAX(s.created_date) as last_ticket_date
+    FROM support_tickets s
+    GROUP BY s.customer_id
+),
+
+-- Customer lifecycle and behavioral features
+customer_lifecycle AS (
+    SELECT 
+        c.customer_id,
+        c.first_name,
+        c.last_name,
+        c.province,
+        c.subscription_type,
+        c.monthly_charges,
+        c.total_charges,
+        c.contract_length,
+        c.payment_method,
+        c.paperless_billing,
+        c.auto_pay,
+        c.account_creation_date,
+        c.last_login_date,
+        -- Calculated lifecycle metrics
+        CURRENT_DATE - c.account_creation_date as days_as_customer,
+        EXTRACT(EPOCH FROM (CURRENT_DATE - c.account_creation_date)) / 86400 / 30 as months_as_customer,
+        CASE 
+            WHEN c.last_login_date IS NOT NULL 
+            THEN CURRENT_DATE - c.last_login_date 
+            ELSE NULL 
+        END as days_since_last_login,
+        -- Account value metrics
+        c.total_charges / NULLIF(EXTRACT(EPOCH FROM (CURRENT_DATE - c.account_creation_date)) / 86400 / 30, 0) as avg_monthly_spend,
+        c.total_charges / NULLIF(c.monthly_charges, 0) as months_of_charges_paid,
+        -- Engagement indicators
+        CASE WHEN c.last_login_date IS NULL THEN 1 ELSE 0 END as never_logged_in,
+        CASE WHEN c.last_login_date < CURRENT_DATE - INTERVAL '30 days' THEN 1 ELSE 0 END as inactive_last_30_days,
+        CASE WHEN c.last_login_date < CURRENT_DATE - INTERVAL '60 days' THEN 1 ELSE 0 END as inactive_last_60_days,
+        -- Account setup indicators
+        CASE WHEN c.referral_code IS NOT NULL THEN 1 ELSE 0 END as came_from_referral,
+        CASE WHEN c.paperless_billing = TRUE THEN 1 ELSE 0 END as uses_paperless_billing,
+        CASE WHEN c.auto_pay = TRUE THEN 1 ELSE 0 END as uses_auto_pay,
+        -- Demographic features
+        EXTRACT(YEAR FROM CURRENT_DATE) - EXTRACT(YEAR FROM c.date_of_birth) as age,
+        -- Subscription features
+        CASE WHEN c.subscription_type = 'Basic' THEN 1 ELSE 0 END as is_basic_subscriber,
+        CASE WHEN c.subscription_type = 'Premium' THEN 1 ELSE 0 END as is_premium_subscriber,
+        CASE WHEN c.subscription_type = 'Enterprise' THEN 1 ELSE 0 END as is_enterprise_subscriber
+    FROM customers c
+),
+
+-- Advanced recency, frequency, monetary (RFM) analysis
+rfm_analysis AS (
+    SELECT 
+        customer_id,
+        -- Recency: days since last transaction
+        CURRENT_DATE - MAX(transaction_date) as days_since_last_transaction,
+        -- Frequency: transaction frequency
+        COUNT(*) as transaction_frequency,
+        -- Monetary: total transaction value
+        SUM(CASE WHEN transaction_type = 'Payment' AND status = 'Completed' THEN amount ELSE 0 END) as monetary_value,
+        -- RFM Scores (1-5 scale)
+        NTILE(5) OVER (ORDER BY CURRENT_DATE - MAX(transaction_date) DESC) as recency_score,
+        NTILE(5) OVER (ORDER BY COUNT(*)) as frequency_score,
+        NTILE(5) OVER (ORDER BY SUM(CASE WHEN transaction_type = 'Payment' AND status = 'Completed' THEN amount ELSE 0 END)) as monetary_score
+    FROM transactions
+    GROUP BY customer_id
+),
+
+-- Payment behavior patterns
+payment_patterns AS (
+    SELECT 
+        customer_id,
+        -- Payment timing patterns
+        AVG(EXTRACT(DAY FROM transaction_date)) as avg_payment_day_of_month,
+        STDDEV(EXTRACT(DAY FROM transaction_date)) as payment_day_consistency,
+        -- Payment method switching
+        COUNT(DISTINCT payment_method) as payment_method_changes,
+        -- Failed payment patterns
+        MAX(CASE WHEN status = 'Failed' THEN transaction_date END) as last_failed_payment_date,
+        COUNT(CASE WHEN status = 'Failed' AND transaction_date >= CURRENT_DATE - INTERVAL '90 days' THEN 1 END) as failed_payments_last_90_days
+    FROM transactions
+    WHERE transaction_type = 'Payment'
+    GROUP BY customer_id
+)
+
+-- Final feature table combining all metrics
+SELECT 
+    cl.customer_id,
+    cl.first_name,
+    cl.last_name,
+    cl.province,
+    cl.subscription_type,
+    cl.monthly_charges,
+    cl.total_charges,
+    cl.contract_length,
+    cl.payment_method,
+    cl.paperless_billing,
+    cl.auto_pay,
+    cl.account_creation_date,
+    cl.last_login_date,
+    cl.days_as_customer,
+    cl.months_as_customer,
+    cl.days_since_last_login,
+    cl.avg_monthly_spend,
+    cl.months_of_charges_paid,
+    cl.never_logged_in,
+    cl.inactive_last_30_days,
+    cl.inactive_last_60_days,
+    cl.came_from_referral,
+    cl.uses_paperless_billing,
+    cl.uses_auto_pay,
+    cl.age,
+    cl.is_basic_subscriber,
+    cl.is_premium_subscriber,
+    cl.is_enterprise_subscriber,
+    
+    -- Transaction metrics
+    COALESCE(tm.total_transactions, 0) as total_transactions,
+    COALESCE(tm.successful_payments, 0) as successful_payments,
+    COALESCE(tm.total_refunds, 0) as total_refunds,
+    COALESCE(tm.failed_transactions, 0) as failed_transactions,
+    COALESCE(tm.failure_rate, 0) as transaction_failure_rate,
+    COALESCE(tm.avg_payment_amount, 0) as avg_payment_amount,
+    COALESCE(tm.payment_amount_stddev, 0) as payment_amount_stddev,
+    tm.last_transaction_date,
+    tm.first_transaction_date,
+    COALESCE(tm.active_months, 0) as active_months,
+    COALESCE(tm.transactions_last_30_days, 0) as transactions_last_30_days,
+    COALESCE(tm.transactions_last_60_days, 0) as transactions_last_60_days,
+    COALESCE(tm.transactions_last_90_days, 0) as transactions_last_90_days,
+    COALESCE(tm.unique_payment_methods, 0) as unique_payment_methods,
+    COALESCE(tm.avg_payment_last_30_days, 0) as avg_payment_last_30_days,
+    COALESCE(tm.avg_payment_30_60_days_ago, 0) as avg_payment_30_60_days_ago,
+    
+    -- Support metrics
+    COALESCE(sm.total_support_tickets, 0) as total_support_tickets,
+    COALESCE(sm.open_tickets, 0) as open_tickets,
+    COALESCE(sm.resolved_tickets, 0) as resolved_tickets,
+    COALESCE(sm.billing_tickets, 0) as billing_tickets,
+    COALESCE(sm.technical_tickets, 0) as technical_tickets,
+    COALESCE(sm.cancellation_tickets, 0) as cancellation_tickets,
+    COALESCE(sm.account_tickets, 0) as account_tickets,
+    COALESCE(sm.high_priority_tickets, 0) as high_priority_tickets,
+    COALESCE(sm.critical_priority_tickets, 0) as critical_priority_tickets,
+    COALESCE(sm.avg_satisfaction_score, 0) as avg_satisfaction_score,
+    COALESCE(sm.min_satisfaction_score, 0) as min_satisfaction_score,
+    COALESCE(sm.low_satisfaction_tickets, 0) as low_satisfaction_tickets,
+    COALESCE(sm.avg_resolution_time_hours, 0) as avg_resolution_time_hours,
+    COALESCE(sm.max_resolution_time_hours, 0) as max_resolution_time_hours,
+    COALESCE(sm.escalated_tickets, 0) as escalated_tickets,
+    COALESCE(sm.escalation_rate, 0) as escalation_rate,
+    COALESCE(sm.tickets_last_30_days, 0) as tickets_last_30_days,
+    COALESCE(sm.tickets_last_60_days, 0) as tickets_last_60_days,
+    COALESCE(sm.tickets_last_90_days, 0) as tickets_last_90_days,
+    COALESCE(sm.unique_channels_used, 0) as unique_channels_used,
+    sm.first_ticket_date,
+    sm.last_ticket_date,
+    
+    -- RFM Analysis
+    COALESCE(rfm.days_since_last_transaction, 999) as days_since_last_transaction,
+    COALESCE(rfm.transaction_frequency, 0) as transaction_frequency,
+    COALESCE(rfm.monetary_value, 0) as monetary_value,
+    COALESCE(rfm.recency_score, 1) as recency_score,
+    COALESCE(rfm.frequency_score, 1) as frequency_score,
+    COALESCE(rfm.monetary_score, 1) as monetary_score,
+    
+    -- Payment patterns
+    COALESCE(pp.avg_payment_day_of_month, 15) as avg_payment_day_of_month,
+    COALESCE(pp.payment_day_consistency, 0) as payment_day_consistency,
+    COALESCE(pp.payment_method_changes, 0) as payment_method_changes,
+    pp.last_failed_payment_date,
+    COALESCE(pp.failed_payments_last_90_days, 0) as failed_payments_last_90_days,
+    
+    -- Target variable
+    ch.is_churned
+
+FROM customer_lifecycle cl
+LEFT JOIN transaction_metrics tm ON cl.customer_id = tm.customer_id
+LEFT JOIN support_metrics sm ON cl.customer_id = sm.customer_id
+LEFT JOIN rfm_analysis rfm ON cl.customer_id = rfm.customer_id
+LEFT JOIN payment_patterns pp ON cl.customer_id = pp.customer_id
+LEFT JOIN churn_labels ch ON cl.customer_id = ch.customer_id;
+
+-- Query 2: Customer Segmentation Analysis
+-- Advanced customer segmentation for business insights
+CREATE OR REPLACE VIEW customer_segments AS
+WITH customer_scores AS (
+    SELECT 
+        customer_id,
+        -- Calculate composite scores
+        CASE 
+            WHEN days_since_last_transaction <= 30 THEN 5
+            WHEN days_since_last_transaction <= 60 THEN 4
+            WHEN days_since_last_transaction <= 90 THEN 3
+            WHEN days_since_last_transaction <= 180 THEN 2
+            ELSE 1
+        END as recency_score,
+        
+        CASE 
+            WHEN transaction_frequency >= 20 THEN 5
+            WHEN transaction_frequency >= 15 THEN 4
+            WHEN transaction_frequency >= 10 THEN 3
+            WHEN transaction_frequency >= 5 THEN 2
+            ELSE 1
+        END as frequency_score,
+        
+        CASE 
+            WHEN monetary_value >= 2000 THEN 5
+            WHEN monetary_value >= 1000 THEN 4
+            WHEN monetary_value >= 500 THEN 3
+            WHEN monetary_value >= 100 THEN 2
+            ELSE 1
+        END as monetary_score,
+        
+        -- Risk score based on support and payment issues
+        CASE 
+            WHEN cancellation_tickets > 0 THEN 5
+            WHEN billing_tickets > 2 THEN 4
+            WHEN failed_transactions > 3 THEN 3
+            WHEN avg_satisfaction_score < 3 THEN 2
+            ELSE 1
+        END as risk_score
+        
+    FROM customer_features
+)
+
+SELECT 
+    cs.*,
+    -- Segment classification
+    CASE 
+        WHEN recency_score >= 4 AND frequency_score >= 4 AND monetary_score >= 4 THEN 'VIP Champions'
+        WHEN recency_score >= 3 AND frequency_score >= 3 AND monetary_score >= 3 THEN 'Loyal Customers'
+        WHEN recency_score >= 4 AND frequency_score <= 2 THEN 'New Customers'
+        WHEN recency_score <= 2 AND frequency_score >= 3 AND monetary_score >= 3 THEN 'At Risk'
+        WHEN recency_score <= 2 AND frequency_score <= 2 THEN 'Lost Customers'
+        WHEN monetary_score >= 4 AND frequency_score <= 2 THEN 'Big Spenders'
+        ELSE 'Regular Customers'
+    END as customer_segment,
+    
+    -- Churn risk level
+    CASE 
+        WHEN risk_score >= 4 THEN 'High Risk'
+        WHEN risk_score >= 3 THEN 'Medium Risk'
+        WHEN risk_score >= 2 THEN 'Low Risk'
+        ELSE 'Very Low Risk'
+    END as churn_risk_level
+
+FROM customer_scores cs;
+
+-- Query 3: Time Series Analysis for Seasonal Patterns
+-- Identify seasonal patterns in customer behavior
+CREATE OR REPLACE VIEW seasonal_patterns AS
+SELECT 
+    DATE_TRUNC('month', transaction_date) as month,
+    COUNT(DISTINCT customer_id) as active_customers,
+    COUNT(*) as total_transactions,
+    SUM(amount) as total_revenue,
+    AVG(amount) as avg_transaction_amount,
+    COUNT(CASE WHEN status = 'Failed' THEN 1 END) as failed_transactions,
+    COUNT(CASE WHEN status = 'Failed' THEN 1 END)::FLOAT / COUNT(*) as failure_rate,
+    
+    -- Year-over-year growth
+    LAG(COUNT(DISTINCT customer_id), 12) OVER (ORDER BY DATE_TRUNC('month', transaction_date)) as active_customers_year_ago,
+    LAG(SUM(amount), 12) OVER (ORDER BY DATE_TRUNC('month', transaction_date)) as revenue_year_ago,
+    
+    -- Month-over-month changes
+    LAG(COUNT(DISTINCT customer_id), 1) OVER (ORDER BY DATE_TRUNC('month', transaction_date)) as active_customers_last_month,
+    LAG(SUM(amount), 1) OVER (ORDER BY DATE_TRUNC('month', transaction_date)) as revenue_last_month
+
+FROM transactions
+WHERE transaction_type = 'Payment'
+GROUP BY DATE_TRUNC('month', transaction_date)
+ORDER BY month;
+
+-- Query 4: Cohort Analysis
+-- Track customer retention by signup month
+CREATE OR REPLACE VIEW cohort_analysis AS
+WITH customer_cohorts AS (
+    SELECT 
+        customer_id,
+        DATE_TRUNC('month', account_creation_date) as cohort_month,
+        account_creation_date
+    FROM customers
+),
+
+customer_activities AS (
+    SELECT 
+        cc.customer_id,
+        cc.cohort_month,
+        DATE_TRUNC('month', t.transaction_date) as activity_month,
+        t.transaction_date
+    FROM customer_cohorts cc
+    JOIN transactions t ON cc.customer_id = t.customer_id
+    WHERE t.status = 'Completed'
+),
+
+cohort_table AS (
+    SELECT 
+        cohort_month,
+        activity_month,
+        COUNT(DISTINCT customer_id) as active_customers,
+        EXTRACT(EPOCH FROM (activity_month - cohort_month)) / 2629746 as period_number -- months
+    FROM customer_activities
+    GROUP BY cohort_month, activity_month
+),
+
+cohort_sizes AS (
+    SELECT 
+        cohort_month,
+        COUNT(DISTINCT customer_id) as cohort_size
+    FROM customer_cohorts
+    GROUP BY cohort_month
+)
+
+SELECT 
+    ct.cohort_month,
+    cs.cohort_size,
+    ct.period_number,
+    ct.active_customers,
+    ct.active_customers::FLOAT / cs.cohort_size as retention_rate
+FROM cohort_table ct
+JOIN cohort_sizes cs ON ct.cohort_month = cs.cohort_month
+WHERE ct.period_number >= 0
+ORDER BY ct.cohort_month, ct.period_number;
+
+-- Query 5: Feature Importance Analysis
+-- Calculate correlation between features and churn
+CREATE OR REPLACE VIEW feature_correlations AS
+SELECT 
+    'failed_transactions' as feature_name,
+    CORR(failed_transactions, CASE WHEN is_churned THEN 1 ELSE 0 END) as correlation_with_churn
+FROM customer_features
+UNION ALL
+SELECT 
+    'avg_satisfaction_score' as feature_name,
+    CORR(avg_satisfaction_score, CASE WHEN is_churned THEN 1 ELSE 0 END) as correlation_with_churn
+FROM customer_features
+UNION ALL
+SELECT 
+    'days_since_last_transaction' as feature_name,
+    CORR(days_since_last_transaction, CASE WHEN is_churned THEN 1 ELSE 0 END) as correlation_with_churn
+FROM customer_features
+UNION ALL
+SELECT 
+    'cancellation_tickets' as feature_name,
+    CORR(cancellation_tickets, CASE WHEN is_churned THEN 1 ELSE 0 END) as correlation_with_churn
+FROM customer_features
+UNION ALL
+SELECT 
+    'billing_tickets' as feature_name,
+    CORR(billing_tickets, CASE WHEN is_churned THEN 1 ELSE 0 END) as correlation_with_churn
+FROM customer_features
+UNION ALL
+SELECT 
+    'months_as_customer' as feature_name,
+    CORR(months_as_customer, CASE WHEN is_churned THEN 1 ELSE 0 END) as correlation_with_churn
+FROM customer_features
+ORDER BY ABS(correlation_with_churn) DESC;
+
+-- Query 6: Data Quality Check
+-- Comprehensive data quality assessment
+CREATE OR REPLACE VIEW data_quality_report AS
+SELECT 
+    'customers' as table_name,
+    COUNT(*) as total_records,
+    COUNT(CASE WHEN email IS NULL THEN 1 END) as missing_email,
+    COUNT(CASE WHEN phone IS NULL THEN 1 END) as missing_phone,
+    COUNT(CASE WHEN last_login_date IS NULL THEN 1 END) as missing_last_login,
+    COUNT(DISTINCT customer_id) as unique_customers,
+    COUNT(*) - COUNT(DISTINCT customer_id) as duplicate_customers
+FROM customers
+UNION ALL
+SELECT 
+    'transactions' as table_name,
+    COUNT(*) as total_records,
+    COUNT(CASE WHEN amount IS NULL THEN 1 END) as missing_amount,
+    COUNT(CASE WHEN status IS NULL THEN 1 END) as missing_status,
+    COUNT(CASE WHEN transaction_date IS NULL THEN 1 END) as missing_date,
+    COUNT(DISTINCT transaction_id) as unique_transactions,
+    COUNT(*) - COUNT(DISTINCT transaction_id) as duplicate_transactions
+FROM transactions
+UNION ALL
+SELECT 
+    'support_tickets' as table_name,
+    COUNT(*) as total_records,
+    COUNT(CASE WHEN satisfaction_score IS NULL THEN 1 END) as missing_satisfaction,
+    COUNT(CASE WHEN resolution_date IS NULL THEN 1 END) as missing_resolution_date,
+    COUNT(CASE WHEN resolution_time_hours IS NULL THEN 1 END) as missing_resolution_time,
+    COUNT(DISTINCT ticket_id) as unique_tickets,
+    COUNT(*) - COUNT(DISTINCT ticket_id) as duplicate_tickets
+FROM support_tickets;
